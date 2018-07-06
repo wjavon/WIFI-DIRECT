@@ -10,6 +10,7 @@ import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pDevice;
 import android.net.wifi.p2p.WifiP2pGroup;
 import android.net.wifi.p2p.WifiP2pInfo;
+import android.net.wifi.p2p.WifiP2pManager;
 import android.net.wifi.p2p.WifiP2pManager.ConnectionInfoListener;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -23,6 +24,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.example.javonwalker.wifi_direct.DeviceListFragment.DeviceActionListener;
 
@@ -50,9 +52,10 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
     ProgressDialog progressDialog = null;
     Button btn_disconnect;
     Button btn_connect;
-    TextView textView=null;
-    static Handler myHandler;
+    Button btn_send;
+    static public Handler myHandler;
 
+    private String deviceName, deviceMAC;
 
     public long Cases_stopTime_GO;
     public long Cases_stopTime_GR;
@@ -62,6 +65,12 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
     public boolean thisIsInitial = true;
 
     public int deviceAmount = 5;
+    public String lastResponse = null;
+    MessageServer server;
+    TextView response = null;
+    public String getLastResponse() {
+        return lastResponse;
+    }
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
@@ -71,6 +80,7 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         mContentView = inflater.inflate(R.layout.device_detail, null);
+        response = (TextView) mContentView.findViewById(R.id.responseTextView);
         final DeviceListFragment List = (DeviceListFragment) getFragmentManager().findFragmentById(R.id.frag_list);
         btn_connect = (Button) mContentView.findViewById(R.id.btn_connect);
         btn_connect.setOnClickListener(new View.OnClickListener() {
@@ -100,6 +110,15 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
                 ((DeviceActionListener) getActivity()).disconnect();
             }
         });
+        btn_send = (Button) mContentView.findViewById(R.id.btn_send);
+        btn_send.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                WiFiDirectActivity myActivity = ((WiFiDirectActivity) getActivity());
+                MessageClient myClient = new MessageClient(info.groupOwnerAddress.getHostAddress(), 8080, response, myActivity.getMyManager(), myActivity.getMyChannel(),DeviceDetailFragment.this);
+                myClient.Send();
+            }
+        });
         return mContentView;
     }
 
@@ -110,13 +129,6 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
         thisIsInitial = false;
         WiFiDirectActivity myActivity3 = ((WiFiDirectActivity) getActivity());
 
-        //set a handler for client/server to show messages
-        myHandler = new Handler() {
-            public void handleMessage(Message msg) {
-                textView=mContentView.findViewById(R.id.sockets);
-                textView.setText(textView.getText()+"\n"+(String)msg.obj);
-            }
-        };
 
         myActivity3.connectionCounter++;
         if(info.groupFormed){
@@ -126,9 +138,9 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
                 Network.setText(String.format("My P2P Group Name: "+myActivity3.getNetworkName()));
                 TextView passphrase = (TextView) mContentView.findViewById(R.id.p2p_group_passphrase);
                 passphrase.setText(String.format("My P2P Group Passphrase: "+ myActivity3.getNetworkPassword()));
-                mContentView.findViewById(R.id.btn_connect).setVisibility(View.GONE);
             }
             else{
+                mContentView.findViewById(R.id.btn_send).setVisibility(View.VISIBLE);
                 mContentView.findViewById(R.id.btn_connect).setVisibility(View.GONE);
             }
             if (myActivity3.connectionCounter == 1) {
@@ -136,14 +148,25 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
                 Cases_timePassed_GO = (Cases_stopTime_GO - myActivity3.Cases_startTime) / 1e9;
                 TextView time_spent_GO = (TextView) mContentView.findViewById(R.id.time_spent_GO);
                 time_spent_GO.setText(String.format("GO-change time: %.4f sec", Cases_timePassed_GO));
-
+                if(info.isGroupOwner==true) server = new MessageServer(response);
 
             } else if (myActivity3.connectionCounter == deviceAmount) {
                 Cases_stopTime_GR = System.nanoTime();
                 Cases_timePassed_GR = (Cases_stopTime_GR - myActivity3.Cases_startTime) / 1e9;
                 TextView time_spent_GR = (TextView) mContentView.findViewById(R.id.time_spent_GR);
                 time_spent_GR.setText(String.format("Group reformation time: %.4f sec", Cases_timePassed_GR));
+                Toast.makeText(getActivity(), "My " + String.valueOf(myActivity3.connectionCounter)+ "th connection_2, No create Server", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(getActivity(), "My " + String.valueOf(myActivity3.connectionCounter)+ "th connection, No create Server", Toast.LENGTH_SHORT).show();
             }
+            myActivity3.getMyManager().discoverPeers(myActivity3.getMyChannel(), new WifiP2pManager.ActionListener() {
+                @Override
+                public void onSuccess() {
+                }
+                @Override
+                public void onFailure(int reasonCode) {
+                }
+            });
         }
 
 
@@ -190,12 +213,15 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
      */
     public void showDetails(WifiP2pDevice device) {
         this.device = device;
+        deviceName=device.deviceName;
+        deviceMAC=device.deviceAddress;
         this.getView().setVisibility(View.VISIBLE);
         TextView view = (TextView) mContentView.findViewById(R.id.device_address);
         view.setText(device.deviceAddress);
         view = (TextView) mContentView.findViewById(R.id.device_info);
         view.setText(device.toString());
-
+        view = (TextView) mContentView.findViewById(R.id.selected_device);
+        view.setText("Desired Device:\nName: "+device.deviceName+"\nMAC Addr: "+device.deviceAddress+"\n\n");
     }
 
 
@@ -214,7 +240,7 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
         view.setText(R.string.empty);
         view = (TextView) mContentView.findViewById(R.id.time_spent_GR);//
         view.setText(R.string.empty);
-        view = (TextView) mContentView.findViewById(R.id.sockets);//
+        view = (TextView) mContentView.findViewById(R.id.responseTextView);//
         view.setText(R.string.empty);
         view = (TextView) mContentView.findViewById(R.id.pickedTime);//
         view.setText(R.string.empty);
@@ -224,6 +250,13 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
         view.setText(R.string.empty);
         view = (TextView) mContentView.findViewById(R.id.local_ip);//
         view.setText(R.string.empty);
+        view = (TextView) mContentView.findViewById(R.id.selected_device);//
+        view.setText("Select a deice");
+    }
+
+    public void handleResponse(String response){ //Gunhan wrote that during his help at Colin&Me pizza place
+        lastResponse = response;
+        Log.d("DetailFragment", response);
     }
 
 
@@ -245,7 +278,7 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
     public void mySetup(WifiP2pConfig config,WifiP2pDevice device){
         String MAC = device.deviceAddress;
         List macList= new ArrayList<String>();
-        macList.add("50:46:5d:c8:31:c9");macList.add(0,"ac:22:0b:45:87:96");macList.add("d8:50:e6:74:db:c5");macList.add(1,"d8:50:e6:74:da:c5");
+        macList.add("50:46:5d:c8:31:c9");macList.add("ac:22:0b:45:87:96");macList.add(0,"d8:50:e6:74:db:c5");macList.add(1,"d8:50:e6:74:da:c5");
         if((MAC ==macList.get(0))|(MAC==macList.get(1))) {
             config.groupOwnerIntent=15;
         }
@@ -255,5 +288,17 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
             } }
     }
 
+    public TextView getResponse() {
+        return response;
+    }
+
+    ///////////////////////////////////////////////////
+    public WifiP2pManager getManager(){
+        WiFiDirectActivity myActivity = ((WiFiDirectActivity) getActivity());
+     return myActivity.getMyManager();}
+    public WifiP2pManager.Channel getChannel(){
+        WiFiDirectActivity myActivity = ((WiFiDirectActivity) getActivity());
+        return myActivity.getMyChannel();}
+    public DeviceDetailFragment getDeatailFragment(){return DeviceDetailFragment.this;}
 
 }

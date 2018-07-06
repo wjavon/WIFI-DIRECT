@@ -36,7 +36,7 @@ import java.util.List;
 
 import static android.os.Environment.*;
 
-public class WiFiDirectActivity extends Activity implements ChannelListener, DeviceActionListener {
+public class WiFiDirectActivity extends Activity implements ChannelListener, DeviceActionListener, WifiP2pManager.ConnectionInfoListener {
 
     public static final String TAG = "wifidirectdemo";
     private WifiP2pManager manager;
@@ -53,6 +53,9 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
     private Channel channel;
     public WiFiDirectBroadcastReceiver receiver = null;
 
+    public boolean CurrentlyGO = false;
+    public boolean thisIsInitial=true;
+
 
     public int connectionCounter = 0;
     public long Cases_startTime;
@@ -64,6 +67,15 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
         this.isWifiP2pEnabled = isWifiP2pEnabled;
     }
 
+    @Override
+    public void onConnectionInfoAvailable(WifiP2pInfo info) {
+        this.info = info;
+
+        thisIsInitial = false;
+        if (info.isGroupOwner) {
+            CurrentlyGO = true;
+        }
+    }
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -214,6 +226,7 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
     public void disconnect() {
         final DeviceDetailFragment DetailFragment = (DeviceDetailFragment) getFragmentManager().findFragmentById(R.id.frag_detail);
         final DeviceListFragment ListFragment = (DeviceListFragment) getFragmentManager().findFragmentById(R.id.frag_list);
+        final MessageServer messageServer = DetailFragment.server;
         DetailFragment.resetViews();
         ListFragment.need_to_Check=true;
         manager.removeGroup(channel, new ActionListener() {
@@ -227,6 +240,8 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
             @Override
             public void onSuccess() {
                 DetailFragment.getView().setVisibility(View.GONE);
+                DetailFragment.lastResponse = null;
+                if(CurrentlyGO){messageServer.onDestroy(); CurrentlyGO=false;}
                 Toast.makeText(WiFiDirectActivity.this, "GO DID disconnect", Toast.LENGTH_SHORT).show();
             }
         });

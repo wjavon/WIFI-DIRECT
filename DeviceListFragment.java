@@ -50,6 +50,7 @@ public class DeviceListFragment extends ListFragment implements PeerListListener
 
 
 
+
     @Override
     public void onConnectionInfoAvailable(final WifiP2pInfo info) {
         this.info = info;
@@ -85,6 +86,7 @@ public class DeviceListFragment extends ListFragment implements PeerListListener
         Log.d(WiFiDirectActivity.TAG, "Peer status :" + deviceStatus);
         switch (deviceStatus) {
             case WifiP2pDevice.AVAILABLE:
+
                 return "Available";
             case WifiP2pDevice.INVITED:
                 return "Invited";
